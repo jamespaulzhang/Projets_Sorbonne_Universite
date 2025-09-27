@@ -32,6 +32,28 @@ def analyse_rapide(d):
             print(f"{q:.1f}, ", end="")
     print("]")
 
+"""
+Question: 
+Discuter le nombre d'intervalles pour l'histogramme et trouver une valeur satisfaisante
+
+Réponse: 
+Le choix du nombre d’intervalles (ou « bins ») dans un histogramme est essentiel : 
+s’il y en a trop peu, l’histogramme devient trop lisse et masque des détails ; 
+s’il y en a trop, il devient bruité et difficile à interpréter. 
+
+Plusieurs règles empiriques existent :
+- Règle de Sturges : k = ⌈log2(n)⌉ + 1
+- Règle de la racine carrée : k ≈ √n
+- Règle de Rice : k = 2 · n^(1/3)
+- Méthodes de Scott ou Freedman–Diaconis : basées sur l’écart-type ou l’IQR
+
+Dans notre cas (n ≈ 6428, pas d’outliers ni de valeurs masquées), 
+les méthodes de Rice ou de Freedman–Diaconis donnent une valeur autour de 30–40 intervalles, 
+ce qui représente un bon compromis entre lisibilité et précision.
+
+Ainsi, un choix satisfaisant est d’environ 35 intervalles.
+"""
+
 def discretisation_histogramme(d, n):
     """
     Discrétisation en n intervalles de largeur constante + histogramme
@@ -50,10 +72,7 @@ def discretisation_histogramme(d, n):
     effectifs = []
     for i in range(n):
         a, b = bornes[i], bornes[i+1]
-        if i < n-1:
-            count = np.where((d >= a) & (d < b), 1, 0).sum()
-        else:
-            count = np.where((d >= a) & (d <= b), 1, 0).sum()  # dernier intervalle inclusif
+        count = np.where((d >= a) & (d <= b), 1, 0).sum()
         effectifs.append(count)
     effectifs = np.array(effectifs)
 
@@ -79,7 +98,6 @@ def discretisation_histogramme(d, n):
     plt.title("Histogramme (np.histogram / plt.hist)")
     plt.show()
 
-
 def discretisation_prix_au_km(data, n):
     """
     Discrétisation et histogramme du prix au km
@@ -102,10 +120,7 @@ def discretisation_prix_au_km(data, n):
     effectifs = []
     for i in range(n):
         a, b = bornes[i], bornes[i+1]
-        if i < n-1:
-            count = np.where((prix_au_km >= a) & (prix_au_km < b), 1, 0).sum()
-        else:
-            count = np.where((prix_au_km >= a) & (prix_au_km <= b), 1, 0).sum()
+        count = np.where((prix_au_km >= a) & (prix_au_km < b), 1, 0).sum()
         effectifs.append(count)
     effectifs = np.array(effectifs)
 
@@ -130,6 +145,28 @@ def discretisation_prix_au_km(data, n):
     plt.ylabel("Effectifs")
     plt.title(f"Histogramme du prix au km (np.histogram / plt.hist, n={n})")
     plt.show()
+
+"""
+Question: 
+Proposer un critère rapide pour vérifier que votre distribution conditionnelle respecte bien les propriétés de base
+
+Réponse:  
+Un critère simple consiste à vérifier deux points :
+Non-négativité : toutes les probabilités doivent être supérieures ou égales à 0.
+Normalisation : pour chaque valeur de la variable conditionnante (ici la marque), la somme des probabilités de la variable conditionnée (ici la distance) doit être égale à 1.
+En pratique, on peut calculer la somme de chaque distribution conditionnelle par marque et vérifier qu’elle est proche de 1 (à une tolérance numérique près).
+"""
+
+"""
+Question: 
+Cette distribution conditionnelle fait apparaître des pics très marqués : pouvons-nous tirer parti de ces informations?
+
+Réponse:  
+Oui. Ces pics indiquent que certaines marques sont fortement associées à des distances particulières. On peut exploiter ces informations de plusieurs façons :
+Prédiction : la présence de pics nets permet de mieux prédire la distance typique d’une voiture connaissant sa marque.
+Segmentation : on peut distinguer des groupes de marques selon leurs profils de distance, ou fusionner celles qui se ressemblent.
+Détection d’anomalies : un trajet dont la distance est très différente du pic attendu pour une marque peut être considéré comme atypique.
+"""
 
 def loi_jointe_distance_marque(data, nb_cat, dico_marques, save_pdf=False):
     """
@@ -322,6 +359,8 @@ def test_correlation_distance_prix(data):
 
     return r
 
+# Corrélation distance/prix : 0.973 → la distance est fortement proportionnelle au prix, relation quasi linéaire.
+
 def test_correlation_distance_confort(data):
     """
     Calcul et affichage de la corrélation distance ↔ étoiles confort.
@@ -355,6 +394,8 @@ def test_correlation_distance_confort(data):
     plt.show()
 
     return r
+
+# Corrélation distance/confort : 0.049 → la distance et le confort sont quasiment indépendants, aucune relation proportionnelle notable.
 
 def calcule_prix_km_seuillée(data, quantile=0.99):
     """
@@ -411,96 +452,127 @@ def loi_jointe(x, y):
 def analyse_ville_horaires_directions(data, coord):
     """
     Analyse des heures de départ et des directions par ville la plus proche.
-    
-    Cette fonction réalise une analyse spatio-temporelle des trajets BlaBlaCar :
-    1. Attribution de chaque trajet à la ville de départ la plus proche
-    2. Analyse de la distribution horaire des départs par ville
-    3. Analyse des directions principales des trajets par ville
-    
-    Entrée :
-        data : tableau numpy 2D contenant les données des trajets
-            colonne 3 : heure de départ (0-23)
-            colonne 6-7 : coordonnées de départ (x, y)
-            colonne 8-9 : coordonnées d'arrivée (x, y)
-        coord : les coordonnées des villes
-    
-    Sortie :
-        Affiche deux séries de graphiques :
-        - Histogrammes des heures de départ par ville
-        - Diagrammes en barres des directions par ville
+    -> Affiche les résultats dans le terminal + génère des graphiques.
     """
 
-    # Liste des noms de villes correspondant aux coordonnées
     noms_villes = ["Grenoble", "Nantes", "Lille", "Strasbourg", "Bordeaux", "Marseille", "Paris"]
 
-    # ÉTAPE 1 : Calcul des distances entre chaque point de départ et les villes de référence
-    # Extraction des coordonnées de départ (colonnes 6 et 7)
+    # ---- ÉTAPE 1 : Attribution ville la plus proche ----
     dep_coords = data[:, 6:8]
-    
-    # Initialisation de la matrice de distances (nb_trajets x nb_villes)
     mat_dist = np.zeros((len(data), len(coord)))
-    
-    # Calcul de la distance euclidienne pour chaque ville
+
     for i, city in enumerate(coord):
-        mat_dist[:, i] = np.sqrt(
-            (dep_coords[:, 0] - city[0])**2 + 
-            (dep_coords[:, 1] - city[1])**2
-        )
-    
-    # Détermination de la ville la plus proche pour chaque trajet
-    # argmin retourne l'indice de la ville avec la distance minimale
+        mat_dist[:, i] = np.sqrt((dep_coords[:, 0] - city[0])**2 + (dep_coords[:, 1] - city[1])**2)
+
     ville_plus_proche = np.argmin(mat_dist, axis=1)
-    
-    # Affichage diagnostique : répartition des trajets par ville
-    print("Distribution des trajets par ville la plus proche:")
+
+    print("\n=== Distribution des trajets par ville la plus proche ===")
     for i, nom in enumerate(noms_villes):
         count = np.sum(ville_plus_proche == i)
-        print(f"{nom}: {count} trajets")
+        print(f"{nom:12s}: {count:5d} trajets")
 
-    # ÉTAPE 2 : Analyse temporelle - Distribution des heures de départ
+    # ---- ÉTAPE 2 : Analyse temporelle ----
+    print("\n=== Analyse horaire par ville ===")
     for i, nom in enumerate(noms_villes):
-        # Extraction des heures de départ pour la ville courante
         heures = data[ville_plus_proche == i, 3]  # colonne 3 = heure
-        
-        # Création de l'histogramme sur 24 heures (0-23h)
-        plt.hist(heures, bins=24, range=(0, 23), alpha=0.7, label=nom)
-        plt.xlabel("Heure de départ")
-        plt.ylabel("Nombre de trajets")
-        plt.title(f"Distribution des heures de départ - {nom}")
-        plt.legend()
-        plt.grid(True, alpha=0.3)
-        plt.show()
+        if len(heures) > 0:
+            moyenne = np.mean(heures)
+            med = np.median(heures)
+            matinaux = np.sum(heures < 8) / len(heures) * 100
+            print(f"{nom:12s} → heure moyenne: {moyenne:.2f}h, médiane: {med:.0f}h, % départs avant 8h: {matinaux:.1f}%")
 
-    # ÉTAPE 3 : Analyse spatiale - Directions des trajets
-    # Calcul des vecteurs déplacement (arrivée - départ)
-    dx = data[:, 8] - data[:, 6]  # différence en longitude (x)
-    dy = data[:, 9] - data[:, 7]  # différence en latitude (y)
-    
-    # Détermination de la direction principale pour chaque trajet
+            # Graphique
+            plt.hist(heures, bins=24, range=(0, 23), alpha=0.7, label=nom)
+            plt.xlabel("Heure de départ")
+            plt.ylabel("Nombre de trajets")
+            plt.title(f"Distribution des heures de départ - {nom}")
+            plt.legend()
+            plt.grid(True, alpha=0.3)
+            plt.show()
+
+    # ---- ÉTAPE 3 : Analyse directionnelle ----
+    dx = data[:, 8] - data[:, 6]
+    dy = data[:, 9] - data[:, 7]
     directions = []
     for i in range(len(dx)):
-        # La direction est déterminée par la composante dominante
         if abs(dx[i]) > abs(dy[i]):
-            # Déplacement principalement Est-Ouest
             directions.append('Est' if dx[i] > 0 else 'Ouest')
         else:
-            # Déplacement principalement Nord-Sud  
             directions.append('Nord' if dy[i] > 0 else 'Sud')
-    
     directions = np.array(directions)
 
-    # Visualisation de la répartition des directions par ville
+    print("\n=== Directions principales par ville ===")
     for i, nom in enumerate(noms_villes):
-        # Filtrage des directions pour la ville courante
         dir_ville = directions[ville_plus_proche == i]
-        
-        # Comptage des occurrences de chaque direction
         unique, counts = np.unique(dir_ville, return_counts=True)
-        
-        # Création du diagramme en barres
-        plt.bar([f"{nom}_{d}" for d in unique], counts, color=['red', 'blue', 'green', 'orange'])
-        plt.xticks(rotation=45)
+
+        # Impression dans le terminal
+        print(f"{nom:12s}: ", end="")
+        for u, c in zip(unique, counts):
+            pourc = c / len(dir_ville) * 100
+            print(f"{u}={c} ({pourc:.1f}%)  ", end="")
+        print("")
+
+        # Graphique
+        plt.bar(unique, counts, color=['red', 'blue', 'green', 'orange'])
+        plt.title(f"Directions des trajets - {nom}")
         plt.ylabel("Nombre de trajets")
-        plt.title(f"Directions des trajets au départ de {nom}")
-        plt.tight_layout()
         plt.show()
+
+'''
+Résultat obtenu :
+=== Distribution des trajets par ville la plus proche ===
+Grenoble : 1047 trajets
+Nantes : 934 trajets
+Lille : 920 trajets
+Strasbourg : 954 trajets
+Bordeaux : 936 trajets
+Marseille : 891 trajets
+Paris : 746 trajets
+
+=== Analyse horaire par ville ===
+Grenoble → heure moyenne : 13.91h, médiane : 15h, % départs avant 8h : 10.1%
+Nantes → heure moyenne : 14.97h, médiane : 16h, % départs avant 8h : 7.8%
+Lille → heure moyenne : 13.15h, médiane : 14h, % départs avant 8h : 15.4%
+Strasbourg → heure moyenne : 13.75h, médiane : 15h, % départs avant 8h : 10.0%
+Bordeaux → heure moyenne : 13.79h, médiane : 14h, % départs avant 8h : 9.1%
+Marseille → heure moyenne : 14.20h, médiane : 15h, % départs avant 8h : 8.9%
+Paris → heure moyenne : 13.86h, médiane : 14h, % départs avant 8h : 11.3%
+
+=== Directions principales par ville ===
+Grenoble : Est = 333 (31.8%), Nord = 133 (12.7%), Ouest = 169 (16.1%), Sud = 412 (39.4%)
+Nantes : Est = 174 (18.6%), Nord = 293 (31.4%), Ouest = 174 (18.6%), Sud = 293 (31.4%)
+Lille : Est = 6 (0.7%), Nord = 264 (28.7%), Ouest = 318 (34.6%), Sud = 332 (36.1%)
+Strasbourg : Est = 58 (6.1%), Nord = 58 (6.1%), Ouest = 288 (30.2%), Sud = 550 (57.7%)
+Bordeaux : Est = 297 (31.7%), Nord = 346 (37.0%), Ouest = 207 (22.1%), Sud = 86 (9.2%)
+Marseille : Est = 385 (43.2%), Nord = 251 (28.2%), Sud = 255 (28.6%)
+Paris : Est = 119 (16.0%), Nord = 178 (23.9%), Ouest = 180 (24.1%), Sud = 269 (36.1%)
+
+Question:
+Si vous étiez un journaliste en manque de sujet de reportage, quel(s) graphique(s) calculeriez vous à partir de ces données?
+
+Réponse:
+Si j’étais journaliste en quête d’un sujet de reportage, je m’appuierais sur les graphiques générés par la fonction :
+tme1.analyse_ville_horaires_directions(data, coord)
+
+Cette fonction calcule automatiquement :
+7 graphiques de la distribution des heures de départ par ville,
+7 graphiques de la direction principale des trajets par ville.
+
+Avec ces représentations, plusieurs angles journalistiques intéressants apparaissent :
+
+Le rythme de vie selon la ville
+Exemple : à Lille, 15.4% des départs ont lieu avant 8h du matin, soit beaucoup plus que dans d’autres villes (Paris : 11.3%, Nantes : 7.8%).
+Cela permettrait de titrer : “Les Lillois se lèvent plus tôt que les Nantais !”
+
+Les préférences directionnelles locales
+À Strasbourg, près de 58% des trajets partent vers le sud, ce qui est beaucoup plus marqué que dans les autres villes.
+À Marseille, 43% des trajets sont orientés vers l’est.
+Cela pourrait donner un article du type : “Strasbourg regarde vers le sud, Marseille vers l’est : comment les villes dessinent leur mobilité ?”
+
+L’inégalité du volume des trajets
+Grenoble domine avec 1047 trajets, alors que Paris en compte seulement 746.
+Titre potentiel : “Paris moins mobile que Grenoble ?”
+
+Ainsi, avec seulement 14 graphiques (heures + directions), on obtient des éléments visuels exploitables pour plusieurs articles, en liant la mobilité aux habitudes sociales, aux contraintes géographiques et au rythme de vie urbain.
+'''
