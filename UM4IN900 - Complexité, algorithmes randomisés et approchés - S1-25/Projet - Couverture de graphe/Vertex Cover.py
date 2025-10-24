@@ -983,11 +983,10 @@ class Graph:
         # 2. Algorithme de couplage
         solutions.append(self.algo_couplage())
         
-        # 3. Heuristique aléatoire (需要先定义这个方法)
+        # 3. Heuristique aléatoire
         if hasattr(self, 'heuristique_aleatoire'):
             solutions.append(self.heuristique_aleatoire(num_trials=20))
         else:
-            # 如果随机启发式方法不存在，使用贪心算法代替
             solutions.append(self.algo_glouton())
         
         # 4. Heuristique de degré pondéré
